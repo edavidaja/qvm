@@ -76,12 +76,13 @@ func DownloadReleaseAsset(client *github.Client, e edition.Edition, tag string, 
 	wb, err := io.Copy(tmpFile, io.TeeReader(rc, counter))
 	log.Tracef("done copying release asset in %s\n", time.Since(start))
 	if err != nil {
-		return tmpFile.Name(), err
+		return "", err
 	}
 	log.Debugf("downloaded %d bytes from release asset at url %s\n", wb, asset.GetBrowserDownloadURL())
 
 	if e.VerifyChecksum {
 		if err := verifyAssetChecksum(client, e, release.Assets, asset.GetName(), tmpFile.Name()); err != nil {
+			os.Remove(tmpFile.Name())
 			return "", err
 		}
 		log.Infof("verified sha256 checksum for %s", asset.GetName())
@@ -131,12 +132,12 @@ func verifyAssetChecksum(client *github.Client, e edition.Edition, assets []*git
 	}
 	rc, _, err := client.Repositories.DownloadReleaseAsset(context.Background(), e.Owner, e.Repo, checksumAsset.GetID(), http.DefaultClient)
 	if err != nil {
-		return err
+		return fmt.Errorf("downloading checksum asset %s: %w", checksumName, err)
 	}
 	defer rc.Close()
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading checksum asset %s: %w", checksumName, err)
 	}
 	return verifyFileChecksum(filePath, string(data))
 }
