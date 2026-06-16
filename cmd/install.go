@@ -83,10 +83,10 @@ func newInstall(installOpts installOpts, release string) (error, string) {
 
 	_, ok := iv[release]
 	if ok {
-		log.Infof("quarto version %s is already installed\n", release)
+		log.Infof("%s version %s is already installed\n", e.Label(), release)
 		return nil, release
 	}
-	log.Info("attempting to install quarto version: ", release)
+	log.Infof("attempting to install %s version: %s\n", e.Label(), release)
 
 	p := edition.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
 	// quarto (q1) has a custom rhel7/centos7 build because of the old glibc;
@@ -107,8 +107,8 @@ func newInstall(installOpts installOpts, release string) (error, string) {
 	if err != nil {
 		return err, ""
 	}
-	log.Infof("new quarto version %s installed\n", release)
-	log.Debugf("new quarto version installed to %s\n", res)
+	log.Infof("new %s version %s installed\n", e.Label(), release)
+	log.Debugf("new %s version installed to %s\n", e.Label(), res)
 	return nil, release
 }
 

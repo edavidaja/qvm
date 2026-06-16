@@ -129,7 +129,7 @@ func newUse(useOpts useOpts, version string) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("now using quarto version: %s\n", version)
+	log.Infof("now using %s version: %s\n", e.Label(), version)
 	return nil
 }
 

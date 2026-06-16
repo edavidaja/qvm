@@ -62,6 +62,15 @@ func FromFlag(q2 bool) Edition {
 	return For(Q1)
 }
 
+// Label is the human-facing name of the edition ("quarto" or "q2"),
+// used in user-visible messages.
+func (e Edition) Label() string {
+	if e.Kind == Q2 {
+		return "q2"
+	}
+	return "quarto"
+}
+
 // ExeName is the binary's name on PATH (the active symlink), OS-aware.
 func (e Edition) ExeName() string {
 	if e.Kind == Q2 {

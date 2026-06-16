@@ -80,3 +80,8 @@ func TestExeRelPath(t *testing.T) {
 	assert.Equal(t, filepath.Join("bin", For(Q1).ExeName()), For(Q1).ExeRelPath())
 	assert.Equal(t, For(Q2).ExeName(), For(Q2).ExeRelPath())
 }
+
+func TestLabel(t *testing.T) {
+	assert.Equal(t, "quarto", For(Q1).Label())
+	assert.Equal(t, "q2", For(Q2).Label())
+}
