@@ -1,6 +1,8 @@
 package edition
 
 import (
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,4 +61,22 @@ func TestAssetSuffix(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestExeName(t *testing.T) {
+	q1 := For(Q1).ExeName()
+	q2 := For(Q2).ExeName()
+	if runtime.GOOS == "windows" {
+		assert.Equal(t, "quarto.cmd", q1)
+		assert.Equal(t, "q2.exe", q2)
+	} else {
+		assert.Equal(t, "quarto", q1)
+		assert.Equal(t, "q2", q2)
+	}
+}
+
+func TestExeRelPath(t *testing.T) {
+	// q1 ships a directory tree (bin/<exe>); q2 ships a single binary at root.
+	assert.Equal(t, filepath.Join("bin", For(Q1).ExeName()), For(Q1).ExeRelPath())
+	assert.Equal(t, For(Q2).ExeName(), For(Q2).ExeRelPath())
 }
