@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package gh
@@ -7,6 +8,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/dpastoor/qvm/internal/edition"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,12 +24,12 @@ func TestReleaseAssetAvailability(t *testing.T) {
 
 	// Test cases covering different Quarto version eras
 	testCases := []struct {
-		version             string
-		hasARM64Linux       bool
-		description         string
-		expectedAssetCount  int
-		requiredAssets      []string
-		unsupportedOnARM64  bool // Should error on ARM64 Linux
+		version            string
+		hasARM64Linux      bool
+		description        string
+		expectedAssetCount int
+		requiredAssets     []string
+		unsupportedOnARM64 bool // Should error on ARM64 Linux
 	}{
 		{
 			version:            "v1.2.335",
@@ -37,34 +39,34 @@ func TestReleaseAssetAvailability(t *testing.T) {
 			unsupportedOnARM64: true,
 		},
 		{
-			version:         "v1.4.553",
-			hasARM64Linux:   true,
-			description:     "v1.4.x - has ARM64 Linux support",
-			requiredAssets:  []string{"linux-amd64.tar.gz", "linux-arm64.tar.gz", "macos.tar.gz", "win.zip"},
+			version:        "v1.4.553",
+			hasARM64Linux:  true,
+			description:    "v1.4.x - has ARM64 Linux support",
+			requiredAssets: []string{"linux-amd64.tar.gz", "linux-arm64.tar.gz", "macos.tar.gz", "win.zip"},
 		},
 		{
-			version:         "v1.5.54",
-			hasARM64Linux:   true,
-			description:     "v1.5.x - has ARM64 Linux support",
-			requiredAssets:  []string{"linux-amd64.tar.gz", "linux-arm64.tar.gz", "macos.tar.gz", "win.zip"},
+			version:        "v1.5.54",
+			hasARM64Linux:  true,
+			description:    "v1.5.x - has ARM64 Linux support",
+			requiredAssets: []string{"linux-amd64.tar.gz", "linux-arm64.tar.gz", "macos.tar.gz", "win.zip"},
 		},
 		{
-			version:         "v1.7.34",
-			hasARM64Linux:   true,
-			description:     "v1.7.x - has ARM64 Linux support",
-			requiredAssets:  []string{"linux-amd64.tar.gz", "linux-arm64.tar.gz", "macos.tar.gz", "win.zip"},
+			version:        "v1.7.34",
+			hasARM64Linux:  true,
+			description:    "v1.7.x - has ARM64 Linux support",
+			requiredAssets: []string{"linux-amd64.tar.gz", "linux-arm64.tar.gz", "macos.tar.gz", "win.zip"},
 		},
 		{
-			version:         "v1.8.25",
-			hasARM64Linux:   true,
-			description:     "v1.8.x - has ARM64 Linux support",
-			requiredAssets:  []string{"linux-amd64.tar.gz", "linux-arm64.tar.gz", "macos.tar.gz", "win.zip"},
+			version:        "v1.8.25",
+			hasARM64Linux:  true,
+			description:    "v1.8.x - has ARM64 Linux support",
+			requiredAssets: []string{"linux-amd64.tar.gz", "linux-arm64.tar.gz", "macos.tar.gz", "win.zip"},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			release, err := GetRelease(client, tc.version)
+			release, err := GetRelease(client, "quarto-dev", "quarto-cli", tc.version)
 			require.NoError(t, err, "Failed to fetch release %s", tc.version)
 			require.NotNil(t, release, "Release should not be nil")
 
@@ -88,27 +90,21 @@ func TestReleaseAssetAvailability(t *testing.T) {
 				os            string
 				shouldSucceed bool
 			}{
-				{"linux", true},      // Should work if asset exists for current arch
-				{"darwin", true},     // Should always work
-				{"windows", true},    // Should always work
+				{"linux", true},   // Should work if asset exists for current arch
+				{"darwin", true},  // Should always work
+				{"windows", true}, // Should always work
 			}
 
 			for _, platform := range platforms {
 				t.Run(platform.os, func(t *testing.T) {
-					suffix := getOsAssetSuffix(platform.os)
-					asset := findAssetForOs(release.Assets, suffix)
+					p := edition.Platform{OS: platform.os, Arch: runtime.GOARCH}
+					suffix, serr := edition.For(edition.Q1).AssetSuffix(p)
+					require.NoError(t, serr)
+					asset := findAssetBySuffix(release.Assets, suffix)
 
-					// Special handling for ARM64 Linux on old releases
 					if platform.os == "linux" && runtime.GOARCH == "arm64" && tc.unsupportedOnARM64 {
-						// This should correctly fail - no ARM64 asset exists
 						assert.Nil(t, asset, "Expected no ARM64 asset for %s (strict behavior)", tc.version)
-
-						// Verify the error message would be helpful
-						if asset == nil {
-							t.Logf("✓ Correctly detected missing ARM64 asset for %s. Error would inform user.", tc.version)
-						}
 					} else {
-						// All other cases should succeed
 						assert.NotNil(t, asset, "Should find asset for %s on %s", tc.version, platform.os)
 					}
 				})
@@ -137,7 +133,7 @@ func TestDownloadReleaseAsset_RealDownload(t *testing.T) {
 
 	t.Logf("Testing download for version %s on %s", version, targetOS)
 
-	tmpPath, err := DownloadReleaseAsset(client, version, targetOS, false)
+	tmpPath, err := DownloadReleaseAsset(client, edition.For(edition.Q1), version, edition.Platform{OS: targetOS, Arch: runtime.GOARCH}, false)
 	require.NoError(t, err, "Download should succeed")
 	require.NotEmpty(t, tmpPath, "Downloaded file path should not be empty")
 
@@ -160,7 +156,7 @@ func TestGetReleases(t *testing.T) {
 
 	client := NewClient(os.Getenv("GITHUB_PAT"))
 
-	releases, err := GetReleases(client, 10, "release")
+	releases, err := GetReleases(client, "quarto-dev", "quarto-cli", 10, "release")
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(releases), 10, "Should return at most 10 releases")
 	assert.Greater(t, len(releases), 0, "Should return at least 1 release")
@@ -179,7 +175,7 @@ func TestGetLatestRelease(t *testing.T) {
 
 	client := NewClient(os.Getenv("GITHUB_PAT"))
 
-	release, err := GetLatestRelease(client)
+	release, err := GetLatestRelease(client, "quarto-dev", "quarto-cli")
 	require.NoError(t, err)
 	require.NotNil(t, release)
 	assert.NotEmpty(t, release.GetTagName())
@@ -201,7 +197,7 @@ func TestDownloadReleaseAsset_UnsupportedPlatform(t *testing.T) {
 	client := NewClient(os.Getenv("GITHUB_PAT"))
 
 	// Try to download v1.2.335 on ARM64 Linux - should fail with helpful error
-	tmpPath, err := DownloadReleaseAsset(client, "v1.2.335", "linux", false)
+	tmpPath, err := DownloadReleaseAsset(client, edition.For(edition.Q1), "v1.2.335", edition.Platform{OS: "linux", Arch: runtime.GOARCH}, false)
 
 	// Should error
 	assert.Error(t, err, "Should error when trying to download unsupported ARM64 release")

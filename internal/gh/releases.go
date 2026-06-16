@@ -8,11 +8,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func GetRelease(client *github.Client, release string) (*github.RepositoryRelease, error) {
+func GetRelease(client *github.Client, owner, repo, release string) (*github.RepositoryRelease, error) {
 	rel, resp, err := client.Repositories.GetReleaseByTag(
 		context.Background(),
-		"quarto-dev",
-		"quarto-cli",
+		owner,
+		repo,
 		release,
 	)
 	log.WithField("resp", resp).Trace("get-latest-release")
@@ -22,17 +22,17 @@ func GetRelease(client *github.Client, release string) (*github.RepositoryReleas
 	return rel, err
 }
 
-func GetLatestRelease(client *github.Client) (*github.RepositoryRelease, error) {
+func GetLatestRelease(client *github.Client, owner, repo string) (*github.RepositoryRelease, error) {
 	rel, resp, err := client.Repositories.GetLatestRelease(
 		context.Background(),
-		"quarto-dev",
-		"quarto-cli",
+		owner,
+		repo,
 	)
 	log.WithField("resp", resp).Trace("get-latest-release")
 	return rel, err
 }
 
-func GetReleases(client *github.Client, n int, releaseType string) ([]*github.RepositoryRelease, error) {
+func GetReleases(client *github.Client, owner, repo string, n int, releaseType string) ([]*github.RepositoryRelease, error) {
 	// max of 50 per page
 	perPage := 100
 	remaining := n - perPage
@@ -52,8 +52,8 @@ func GetReleases(client *github.Client, n int, releaseType string) ([]*github.Re
 		log.Tracef("perpage: %d, remaining: %d", opts.PerPage, remaining)
 		rel, resp, err := client.Repositories.ListReleases(
 			context.Background(),
-			"quarto-dev",
-			"quarto-cli",
+			owner,
+			repo,
 			opts,
 		)
 		if err != nil {
