@@ -6,9 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/adrg/xdg"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/dpastoor/qvm/internal/edition"
 )
 
 func GetConfigPath() (string, error) {
@@ -35,60 +38,57 @@ func GetPathToActiveBinDir() string {
 	return path
 }
 
-func GetPathToActiveQuartoExe() string {
-	quartoExe := "quarto"
-	if runtime.GOOS == "windows" {
-		quartoExe = "quarto.cmd"
-	}
-	return filepath.Join(GetPathToActiveBinDir(), quartoExe)
+// GetPathToActiveExe returns the path to the active symlink for an edition
+// inside the shared active bin dir (e.g. .../qvm/bin/quarto or .../qvm/bin/q2).
+func GetPathToActiveExe(e edition.Edition) string {
+	return filepath.Join(GetPathToActiveBinDir(), e.ExeName())
 }
-func GetPathToVersionsDir() string {
-	// if running as root, install to /opt/quarto as an admin helper
-	if runtime.GOOS == "linux" && os.Getuid() == 0 {
+func GetPathToVersionsDir(e edition.Edition) string {
+	// if running as root, install q1 to /opt/quarto as an admin helper
+	if runtime.GOOS == "linux" && os.Getuid() == 0 && e.Kind == edition.Q1 {
 		return filepath.Join("/opt", "quarto")
 	}
-
-	return filepath.Join(xdg.DataHome, "qvm", "versions")
+	return filepath.Join(xdg.DataHome, "qvm", e.VersionsDirName)
 }
 
-func GetActiveVersion() (string, error) {
-	path, err := filepath.EvalSymlinks(GetPathToActiveQuartoExe())
+func GetActiveVersion(e edition.Edition) (string, error) {
+	path, err := filepath.EvalSymlinks(GetPathToActiveExe(e))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", errors.New("no active quarto version detected")
 		}
 		return "", err
 	}
-	// the path should resolve to .../versions/<version>/bin/quarto
-	// could also consider filepath.SplitList
-	version := filepath.Base(filepath.Dir(filepath.Dir(path)))
-	if version == "." {
+	// path resolves to <versionsDir>/<version>/<ExeRelPath>; strip the
+	// ExeRelPath components to land on the version dir, then take its base.
+	versionDir := path
+	for range strings.Split(filepath.ToSlash(e.ExeRelPath()), "/") {
+		versionDir = filepath.Dir(versionDir)
+	}
+	version := filepath.Base(versionDir)
+	if version == "." || version == string(filepath.Separator) {
 		return "", errors.New(`
-		something went wrong with the active version detection, 
+		something went wrong with the active version detection,
 		please contact the developers`)
 	}
 	return version, nil
 }
 
-// GetInstalledVersions returns a map of installed versions where they key is the version
-// and the value is the path to the quarto executable
-func GetInstalledVersions() (map[string]string, error) {
+// GetInstalledVersions returns a map of installed versions for an edition where
+// the key is the version and the value is the path to its executable.
+func GetInstalledVersions(e edition.Edition) (map[string]string, error) {
 	iv := make(map[string]string)
-	entries, err := os.ReadDir(GetPathToVersionsDir())
+	entries, err := os.ReadDir(GetPathToVersionsDir(e))
 	if err != nil {
 		return iv, err
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			quartoExe := "quarto"
-			if runtime.GOOS == "windows" {
-				quartoExe = "quarto.cmd"
-			}
-			quartoPath := filepath.Join(GetPathToVersionsDir(), entry.Name(), "bin", quartoExe)
-			if _, err := os.Stat(quartoPath); err == nil {
-				iv[entry.Name()] = quartoPath
+			exePath := filepath.Join(GetPathToVersionsDir(e), entry.Name(), e.ExeRelPath())
+			if _, err := os.Stat(exePath); err == nil {
+				iv[entry.Name()] = exePath
 			} else {
-				log.Warn("could not find expected quarto executable for version: ", entry.Name())
+				log.Warn("could not find expected executable for version: ", entry.Name())
 			}
 		}
 	}
