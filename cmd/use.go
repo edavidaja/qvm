@@ -4,14 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/coreos/go-semver/semver"
 	"github.com/dpastoor/qvm/internal/config"
+	"github.com/dpastoor/qvm/internal/edition"
 	"github.com/dpastoor/qvm/internal/gh"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -26,10 +25,12 @@ type useCmd struct {
 
 type useOpts struct {
 	install bool
+	q2      bool
 }
 
 func newUse(useOpts useOpts, version string) error {
-	iv, err := config.GetInstalledVersions()
+	e := edition.FromFlag(useOpts.q2)
+	iv, err := config.GetInstalledVersions(e)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -64,7 +65,7 @@ func newUse(useOpts useOpts, version string) error {
 	}
 	client := gh.NewClient(os.Getenv("GITHUB_PAT"))
 	if version == "release" {
-		latestRelease, err := gh.GetLatestRelease(client)
+		latestRelease, err := gh.GetLatestRelease(client, e.Owner, e.Repo)
 		if err != nil {
 			return err
 		}
@@ -73,7 +74,7 @@ func newUse(useOpts useOpts, version string) error {
 	if version == "latest" {
 		if useOpts.install {
 			// this will install further down if the version isn't already installed
-			repo, err := gh.GetReleases(client, 1, "")
+			repo, err := gh.GetReleases(client, e.Owner, e.Repo, 1, "")
 			if err != nil {
 				return err
 			}
@@ -86,7 +87,7 @@ func newUse(useOpts useOpts, version string) error {
 	if version == "" {
 		// not worried about an error here as an active version of
 		// empty string just won't match any description below
-		activeVersion, _ := config.GetActiveVersion()
+		activeVersion, _ := config.GetActiveVersion(e)
 		err = survey.AskOne(&survey.Select{
 			Message: "Which version do you want to use?",
 			Options: versions,
@@ -104,7 +105,7 @@ func newUse(useOpts useOpts, version string) error {
 	quartopath, ok := iv[version]
 	if !ok {
 		if useOpts.install {
-			err, version = newInstall(installOpts{progress: true}, version)
+			err, version = newInstall(installOpts{progress: true, q2: useOpts.q2}, version)
 			if err != nil {
 				return err
 			}
@@ -116,17 +117,14 @@ func newUse(useOpts useOpts, version string) error {
 	if err != nil {
 		return err
 	}
-	quartoExe := "quarto"
-	if runtime.GOOS == "windows" {
-		quartoExe = "quarto.cmd"
-	}
-	err = os.Remove(filepath.Join(config.GetPathToActiveBinDir(), quartoExe))
+	activeExe := config.GetPathToActiveExe(e)
+	err = os.Remove(activeExe)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	err = os.Symlink(
 		quartopath,
-		filepath.Join(config.GetPathToActiveBinDir(), quartoExe),
+		activeExe,
 	)
 	if err != nil {
 		return err
@@ -137,6 +135,7 @@ func newUse(useOpts useOpts, version string) error {
 
 func setUseOpts(useOpts *useOpts) {
 	useOpts.install = viper.GetBool("install")
+	useOpts.q2 = viper.GetBool("use-q2")
 }
 
 func (opts *useOpts) Validate() error {
@@ -171,6 +170,8 @@ func newUseCmd() *useCmd {
 	}
 	cmd.Flags().Bool("install", false, "install the version if not already installed")
 	viper.BindPFlag("install", cmd.Flags().Lookup("install"))
+	cmd.Flags().Bool("q2", false, "manage Quarto v2 (q2) instead of classic quarto")
+	viper.BindPFlag("use-q2", cmd.Flags().Lookup("q2"))
 	root.cmd = cmd
 	return root
 }

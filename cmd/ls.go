@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/dpastoor/qvm/internal/config"
+	"github.com/dpastoor/qvm/internal/edition"
 	"github.com/dpastoor/qvm/internal/gh"
 	"github.com/jedib0t/go-pretty/v6/table"
 	log "github.com/sirupsen/logrus"
@@ -25,14 +26,16 @@ type lsOpts struct {
 	num     int
 	release string
 	output  string
+	q2      bool
 }
 
 func newLs(lsOpts lsOpts) error {
+	e := edition.FromFlag(lsOpts.q2)
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	if lsOpts.remote {
 		client := gh.NewClient(os.Getenv("GITHUB_PAT"))
-		releases, err := gh.GetReleases(client, lsOpts.num, lsOpts.release)
+		releases, err := gh.GetReleases(client, e.Owner, e.Repo, lsOpts.num, lsOpts.release)
 		if err != nil {
 			return err
 		}
@@ -48,7 +51,7 @@ func newLs(lsOpts lsOpts) error {
 			t.AppendRow(table.Row{r.GetTagName(), createdAt.Format("2006-01-02"), r.GetName(), releaseType})
 		}
 	} else {
-		entries, err := os.ReadDir(config.GetPathToVersionsDir())
+		entries, err := os.ReadDir(config.GetPathToVersionsDir(e))
 		if errors.Is(err, os.ErrNotExist) {
 			fmt.Println("No installed quarto versions found")
 			return nil
@@ -73,13 +76,13 @@ func newLs(lsOpts lsOpts) error {
 		})
 		// no need to worry about errors since just need to know version
 		// for matching below and won't match if doesn't exist
-		activeVersion, _ := config.GetActiveVersion()
-		for _, e := range entries {
-			if e.IsDir() {
-				dinfo, _ := e.Info()
-				name := e.Name()
+		activeVersion, _ := config.GetActiveVersion(e)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				dinfo, _ := entry.Info()
+				name := entry.Name()
 				active := ""
-				if activeVersion == e.Name() {
+				if activeVersion == entry.Name() {
 					active = "*"
 				} else {
 				}
@@ -105,6 +108,7 @@ func setLsOpts(lsOpts *lsOpts) {
 	lsOpts.num = viper.GetInt("number")
 	lsOpts.release = viper.GetString("release-type")
 	lsOpts.output = viper.GetString("output")
+	lsOpts.q2 = viper.GetBool("ls-q2")
 }
 
 func (opts *lsOpts) Validate() error {
@@ -148,6 +152,8 @@ func newLsCmd() *lsCmd {
 	viper.BindPFlag("number", cmd.Flags().Lookup("number"))
 	cmd.Flags().String("output", "default", "list remote versions")
 	viper.BindPFlag("output", cmd.Flags().Lookup("output"))
+	cmd.Flags().Bool("q2", false, "manage Quarto v2 (q2) instead of classic quarto")
+	viper.BindPFlag("ls-q2", cmd.Flags().Lookup("q2"))
 	root.cmd = cmd
 	return root
 }

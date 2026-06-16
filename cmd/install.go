@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/dpastoor/qvm/internal/config"
+	"github.com/dpastoor/qvm/internal/edition"
 	"github.com/dpastoor/qvm/internal/gh"
 	"github.com/dpastoor/qvm/internal/pipeline"
 	log "github.com/sirupsen/logrus"
@@ -25,16 +26,18 @@ type installCmd struct {
 type installOpts struct {
 	progress bool
 	release  string
+	q2       bool
 }
 
 func newInstall(installOpts installOpts, release string) (error, string) {
-	iv, err := config.GetInstalledVersions()
+	e := edition.FromFlag(installOpts.q2)
+	iv, err := config.GetInstalledVersions(e)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err, ""
 	}
 	if release == "" {
 		client := gh.NewClient(os.Getenv("GITHUB_PAT"))
-		releases, err := gh.GetReleases(client, 100, installOpts.release)
+		releases, err := gh.GetReleases(client, e.Owner, e.Repo, 100, installOpts.release)
 		if err != nil {
 			return err, ""
 		}
@@ -62,7 +65,7 @@ func newInstall(installOpts installOpts, release string) (error, string) {
 	// not the latest tagged version
 	if release == "release" {
 		client := gh.NewClient(os.Getenv("GITHUB_PAT"))
-		latestRelease, err := gh.GetLatestRelease(client)
+		latestRelease, err := gh.GetLatestRelease(client, e.Owner, e.Repo)
 		if err != nil {
 			return err, ""
 		}
@@ -71,7 +74,7 @@ func newInstall(installOpts installOpts, release string) (error, string) {
 
 	if release == "latest" {
 		client := gh.NewClient(os.Getenv("GITHUB_PAT"))
-		releases, err := gh.GetReleases(client, 1, "release")
+		releases, err := gh.GetReleases(client, e.Owner, e.Repo, 1, "release")
 		if err != nil {
 			return err, ""
 		}
@@ -84,25 +87,23 @@ func newInstall(installOpts installOpts, release string) (error, string) {
 		return nil, release
 	}
 	log.Info("attempting to install quarto version: ", release)
-	osType := runtime.GOOS
 
-	// quarto has a specific custom version for rhel7/centos7 because
-	// of the old version of glibc so if on linux we need to also check
-	// what version to pull
-	if osType == "linux" {
-		// check if rhel7 system
+	p := edition.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
+	// quarto (q1) has a custom rhel7/centos7 build because of the old glibc;
+	// q2 has no such build, so only probe for q1.
+	if e.Kind == edition.Q1 && p.OS == "linux" {
 		if _, err := os.Stat("/etc/redhat-release"); err == nil {
 			releaseVersion, err := os.ReadFile("/etc/redhat-release")
 			if err != nil {
 				return err, ""
 			}
 			if strings.Contains(string(releaseVersion), "release 7") {
-				osType = "rhel7"
+				p.OS = "rhel7"
 			}
 		}
 	}
 
-	res, err := pipeline.DownloadReleaseVersion(release, osType, installOpts.progress)
+	res, err := pipeline.DownloadReleaseVersion(e, release, p, installOpts.progress)
 	if err != nil {
 		return err, ""
 	}
@@ -114,6 +115,7 @@ func newInstall(installOpts installOpts, release string) (error, string) {
 func setInstallOpts(installOpts *installOpts) {
 	installOpts.progress = !viper.GetBool("no-progress")
 	installOpts.release = viper.GetString("releasetype")
+	installOpts.q2 = viper.GetBool("install-q2")
 }
 
 func (opts *installOpts) Validate() error {
@@ -172,6 +174,8 @@ func newInstallCmd() *installCmd {
 	viper.BindPFlag("no-progress", cmd.Flags().Lookup("no-progress"))
 	cmd.Flags().String("release-type", "", "release type (release)")
 	viper.BindPFlag("releasetype", cmd.Flags().Lookup("release-type"))
+	cmd.Flags().Bool("q2", false, "manage Quarto v2 (q2) instead of classic quarto")
+	viper.BindPFlag("install-q2", cmd.Flags().Lookup("q2"))
 	root.cmd = cmd
 	return root
 }

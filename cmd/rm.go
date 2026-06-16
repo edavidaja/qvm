@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 
 	"github.com/dpastoor/qvm/internal/config"
+	"github.com/dpastoor/qvm/internal/edition"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 type rmCmd struct {
@@ -16,19 +18,21 @@ type rmCmd struct {
 }
 
 type rmOpts struct {
+	q2 bool
 }
 
 func newRm(rmOpts rmOpts, versions []string) error {
+	e := edition.FromFlag(rmOpts.q2)
 	for _, v := range versions {
 		if v == "latest" || v == "release" {
 			log.Fatalf("qvm rm does not support latest/release terms for now, please use explicit versions only, such as v1.1.251\n")
 		}
 	}
-	activeVersion, err := config.GetActiveVersion()
+	activeVersion, err := config.GetActiveVersion(e)
 	if err != nil {
 		return err
 	}
-	allVersions, err := config.GetInstalledVersions()
+	allVersions, err := config.GetInstalledVersions(e)
 	if err != nil {
 		return err
 	}
@@ -41,7 +45,7 @@ func newRm(rmOpts rmOpts, versions []string) error {
 		if v == activeVersion {
 			log.Warnf("removing active version %s, be sure to set a new active version\n", v)
 		}
-		err := os.RemoveAll(filepath.Join(config.GetPathToVersionsDir(), v))
+		err := os.RemoveAll(filepath.Join(config.GetPathToVersionsDir(e), v))
 		if err != nil {
 			return err
 		}
@@ -51,7 +55,7 @@ func newRm(rmOpts rmOpts, versions []string) error {
 }
 
 func setRmOpts(rmOpts *rmOpts) {
-
+	rmOpts.q2 = viper.GetBool("rm-q2")
 }
 
 func (opts *rmOpts) Validate() error {
@@ -80,6 +84,8 @@ func newRmCmd() *rmCmd {
 			return nil
 		},
 	}
+	cmd.Flags().Bool("q2", false, "manage Quarto v2 (q2) instead of classic quarto")
+	viper.BindPFlag("rm-q2", cmd.Flags().Lookup("q2"))
 	root.cmd = cmd
 	return root
 }

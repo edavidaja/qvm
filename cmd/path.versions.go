@@ -4,8 +4,10 @@ import (
 	"fmt"
 
 	"github.com/dpastoor/qvm/internal/config"
+	"github.com/dpastoor/qvm/internal/edition"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 type pathVersionsCmd struct {
@@ -14,15 +16,17 @@ type pathVersionsCmd struct {
 }
 
 type pathVersionsOpts struct {
+	q2 bool
 }
 
 func newPathVersions(pathVersionsOpts pathVersionsOpts) error {
-	fmt.Println(config.GetPathToVersionsDir())
+	e := edition.FromFlag(pathVersionsOpts.q2)
+	fmt.Println(config.GetPathToVersionsDir(e))
 	return nil
 }
 
 func setPathVersionsOpts(pathVersionsOpts *pathVersionsOpts) {
-
+	pathVersionsOpts.q2 = viper.GetBool("path-versions-q2")
 }
 
 func (opts *pathVersionsOpts) Validate() error {
@@ -51,6 +55,8 @@ func newPathVersionsCmd() *pathVersionsCmd {
 			return nil
 		},
 	}
+	cmd.Flags().Bool("q2", false, "manage Quarto v2 (q2) instead of classic quarto")
+	viper.BindPFlag("path-versions-q2", cmd.Flags().Lookup("q2"))
 	root.cmd = cmd
 	return root
 }
