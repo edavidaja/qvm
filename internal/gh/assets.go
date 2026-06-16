@@ -21,6 +21,7 @@ type WriteCounter struct {
 	Written  int
 	Total    int
 	Label    string
+	Name     string
 	nWrites  int
 	progress bool
 }
@@ -30,12 +31,12 @@ func (wc *WriteCounter) Write(p []byte) (int, error) {
 	wc.Written += n
 	wc.nWrites++
 	if wc.progress && wc.nWrites%300 == 0 {
-		log.Infof("downloading quarto version %s ... (%s/%s)", wc.Label,
+		log.Infof("downloading %s version %s ... (%s/%s)", wc.Name, wc.Label,
 			humanize.Bytes(uint64(wc.Written)),
 			humanize.Bytes(uint64(wc.Total)))
 	}
 	if wc.Written == wc.Total {
-		log.Infof("completed downloading quarto version %s", wc.Label)
+		log.Infof("completed downloading %s version %s", wc.Name, wc.Label)
 	}
 	return n, nil
 }
@@ -72,7 +73,7 @@ func DownloadReleaseAsset(client *github.Client, e edition.Edition, tag string, 
 	defer tmpFile.Close()
 	log.Tracef("starting to copy release asset to %s\n", tmpFile.Name())
 	start = time.Now()
-	counter := &WriteCounter{Total: asset.GetSize(), Label: tag, progress: progress}
+	counter := &WriteCounter{Total: asset.GetSize(), Label: tag, Name: e.Label(), progress: progress}
 	wb, err := io.Copy(tmpFile, io.TeeReader(rc, counter))
 	log.Tracef("done copying release asset in %s\n", time.Since(start))
 	if err != nil {

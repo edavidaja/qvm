@@ -53,7 +53,7 @@ func newLs(lsOpts lsOpts) error {
 	} else {
 		entries, err := os.ReadDir(config.GetPathToVersionsDir(e))
 		if errors.Is(err, os.ErrNotExist) {
-			fmt.Println("No installed quarto versions found")
+			fmt.Printf("No installed %s versions found\n", e.Label())
 			return nil
 		}
 		if err != nil {
